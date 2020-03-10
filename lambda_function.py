@@ -29,7 +29,7 @@ dyndb = boto3.resource('dynamodb', region_name=region_name)
 archive_table = dyndb.Table(archive_table_name)
 collection_table = dyndb.Table(collection_table_name)
 
-single_value_headers = ['Identifier', 'Title', 'Description', 'Circa', 'Start Date', 'End Date', 'Visibility', 'Rights']
+single_value_headers = ['Identifier', 'Title', 'Description', 'Circa', 'Start Date', 'End Date', 'Visibility']
 multi_value_headers = ['Creator', 'Source', 'Subject', 'Coverage', 'Language', 'Type', 'Is Part Of', 'Medium',
                        'Format', 'Related URL', 'Contributor', 'Tags']
 old_key_list = ['title', 'description', 'creator', 'source', 'circa', 'start_date', 'end_date', 'subject',

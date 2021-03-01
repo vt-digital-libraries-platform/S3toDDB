@@ -145,6 +145,8 @@ def create_item_in_table(table, attr_dict, item_type):
     if short_id:
         attr_dict['custom_key'] = noid_scheme + noid_naa + "/" + short_id
     now = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+    attr_dict['create_date'] = now
+    attr_dict['modified_date'] = now
     utc_now = utcformat(datetime.now())
     attr_dict['createdAt'] = utc_now
     attr_dict['updatedAt'] = utc_now
@@ -160,8 +162,7 @@ def create_item_in_table(table, attr_dict, item_type):
 
 def update_item_in_table(table, attr_dict, key_val):
     del attr_dict['identifier']
-    attr_dict['create_date'] = None
-    attr_dict['modified_date'] = None
+    attr_dict['modified_date'] = now
     utc_now = utcformat(datetime.now())
     attr_dict['updatedAt'] = utc_now
     return update_remove_attr_from_table(table, attr_dict, key_val)

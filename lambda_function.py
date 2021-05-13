@@ -39,10 +39,11 @@ except Exception as e:
     print(f"An error occurred: {str(e)}")
     raise e
 
-single_value_headers = ['Identifier', 'Title', 'Description', 'Rights', 'Bibliographic Citation',
-                        'Rights Holder', 'Extent']
-multi_value_headers = ['Creator', 'Source', 'Subject', 'Coverage', 'Language', 'Type', 'Is Part Of', 'Medium',
-                       'Format', 'Related URL', 'Contributor', 'Tags', 'Provenance', 'Identifier2', 'Reference']
+single_value_headers = ['dcterms.description', 'dcterms.bibliographicCitation', 'dcterms.extent', 'dcterms.identifier',
+                        'dcterms.rights', 'dcterms.rightsHolder', 'dcterms.title']
+multi_value_headers = ['dcterms.creator', 'dcterms.contributor', 'dcterms.coverage', 'dcterms.format', 'dcterms.isPartOf',
+                       'dcterms.language', 'dcterms.medium', 'dcterms.provenance', 'dcterms.references', 'dcterms.relation',
+                       'dcterms.source', 'dcterms.subject', 'dcterms.type', 'Identifier2']
 old_key_list = ['title', 'description', 'creator', 'source', 'circa', 'start_date', 'end_date', 'subject',
                 'belongs_to', 'resource_type', 'location', 'language', 'rights_statement', 'medium',
                 'bibliographic_citation', 'rights_holder', 'format', 'related_url', 'contributor', 'tags', 'parent_collection',
@@ -57,8 +58,9 @@ new_key_list = [':t', ':d', ':c', ':s', ':ci', ':st', ':e', ':su', ':bt', ':rt',
                 ':ru', ':ct', ':tg', ':pc', ':cc', ':ic', ':co', ':mu', ':tp', ':v', ':cd', ':m', ':pv', ':rf', ':rp', ':ca',
                 ':ua', ':dd', ':et', ':hp']
 key_list_len = len(old_key_list)
-csv_columns_to_attributes = {'Type': 'resource_type', 'Is Part Of': 'belongs_to', 'Coverage': 'location',
-                             'Rights': 'rights_statement', 'Identifier2': 'repository'}
+csv_columns_to_attributes = {'bibliographicCitation': 'bibliographic_citation', 'coverage': 'location', 'identifier2': 'repository',
+                             'ispartof': 'belongs_to', 'references': 'reference', 'relation': 'related_url', 'rights': 'rights_statement',
+                             'rightsHolder': 'rights_holder', 'type': 'resource_type'}
 reversed_attribute_names = {'source': '#s', 'location': '#l', 'language':'#la', 'format':'#f', 'collection': '#c', 'reference': '#rf'}
 
 def lambda_handler(event, context):
@@ -90,7 +92,8 @@ def batch_import_collections(response):
     for idx, row in df.iterrows():
         collection_dict = process_csv_metadata(row, 'Collection')
         if not collection_dict:
-            continue
+            print(f"Error: Collection {idx+1} has failed to be imported.")
+            break
         identifier = collection_dict['identifier']
         items = query_by_index(collection_table, 'Identifier', identifier)
         if len(items) > 1:
@@ -114,7 +117,8 @@ def batch_import_archives(response):
     for idx, row in df.iterrows():
         archive_dict = process_csv_metadata(row, 'Archive')
         if not archive_dict:
-            continue
+            print(f"Error: Archive {idx+1} has failed to be imported.")
+            break
         find_and_update(archive_table, archive_dict, 'Archive', idx)
 
 def batch_import_archives_with_path(response):
@@ -132,10 +136,9 @@ def batch_import_archives_with_path(response):
         df = pd.read_csv(csv_path, na_values='NaN', keep_default_na=False, encoding='utf-8', dtype={'Start Date': str, 'End Date': str})
         for idx, row in df.iterrows():
             archive_dict = process_csv_metadata(row, 'Archive')
-            if ('identifier' not in archive_dict.keys()) and ('title' not in archive_dict.keys()):
+            if not archive_dict:
+                print(f"Error: Archive {idx+1} has failed to be imported.")
                 break
-            elif ('identifier' not in archive_dict.keys()) or ('title' not in archive_dict.keys()):
-                continue
             identifier = archive_dict['identifier']
             matching_parent_paths = [path for path in archive_identifiers if path.endswith(identifier)]
             if len(matching_parent_paths) == 1:
@@ -201,6 +204,7 @@ def update_item_in_table(table, attr_dict, key_val):
     del attr_dict['identifier']
     attr_dict['create_date'] = None
     attr_dict['modified_date'] = None
+    attr_dict['circa'] = None
     utc_now = utcformat(datetime.now())
     attr_dict['updatedAt'] = utc_now
     return update_remove_attr_from_table(table, attr_dict, key_val)
@@ -263,9 +267,16 @@ def process_csv_metadata(data_row, item_type):
 
     attr_dict = {}
     for items in data_row.iteritems():
-        if items[0].strip() and str(items[1]).strip():
-            set_attribute(attr_dict, items[0].strip(), str(items[1]).strip())
+        header = items[0].strip()
+        value = str(items[1]).strip()
+        if header == 'Tags':
+            print(f"Unacceptable header exists: {header}")
+            attr_dict = None
+            break
+        elif header and value:
+            set_attribute(attr_dict, header, value)
     if ('identifier' not in attr_dict.keys()) or ('title' not in attr_dict.keys()):
+        attr_dict = None
         print(f"Missing required attribute in this row!")
     else:
         set_attributes_from_env(attr_dict, item_type)
@@ -288,16 +299,17 @@ def set_attributes_from_env(attr_dict, item_type):
         attr_dict['visibility'] = True
 
 def set_attribute(attr_dict, attr, value):
-    lower_attr = attr.lower().replace(' ', '_')
-    if attr == 'Circa':
-        if str(value).lower() == 'yes':
-            attr_dict[lower_attr] = 'Circa '
-    elif attr == 'Visibility':
+    lower_attr = attr.lower().replace(' ', '_').replace('dcterms.', '')
+    if attr == 'Visibility':
         if str(value).lower() == 'true':
             attr_dict[lower_attr] = True
         else:
             attr_dict[lower_attr] = False
-    elif attr == 'Start Date' or attr == 'End Date':
+    elif attr == 'dcterms.created':
+        lower_attr = 'start_date'
+        print_index_date(attr_dict, value, lower_attr)
+    elif attr == 'dcterms.date':
+        lower_attr = 'end_date'
         print_index_date(attr_dict, value, lower_attr)
     elif attr == 'Display_Date':
         attr_dict[lower_attr] = value
@@ -319,8 +331,8 @@ def set_attribute(attr_dict, attr, value):
             attr_dict['thumbnail_path'] = app_img_root_path + 'thumbnail/' + thumbnail + '.png'
             attr_dict['manifest_url'] = value
     else:
-        if attr in csv_columns_to_attributes:
-            lower_attr = csv_columns_to_attributes[attr]
+        if lower_attr in csv_columns_to_attributes:
+            lower_attr = csv_columns_to_attributes[lower_attr]
         extracted_value = extract_attribute(attr, value)
         if extracted_value:
             attr_dict[lower_attr] = extracted_value

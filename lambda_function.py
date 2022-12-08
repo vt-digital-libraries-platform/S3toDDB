@@ -15,6 +15,9 @@ from botocore.response import StreamingBody
 
 # Environment variables
 collection_category = os.getenv('Collection_Category')
+#rights_statement = os.getenv('Rights_Statement')
+#biblio_citation = os.getenv('Bibliographic_Citation')
+#rights_holder = os.getenv('Rights_Holder')
 region_name = os.getenv('REGION')
 collection_table_name = os.getenv('DYNO_Collection_TABLE')
 archive_table_name = os.getenv('DYNO_Archive_TABLE')
@@ -488,6 +491,15 @@ def process_csv_metadata(data_row, item_type):
 
 
 def set_attributes_from_env(attr_dict, item_type):
+#    if collection_category == 'IAWA':
+#        if ('rights_statement' not in attr_dict.keys()):
+#            attr_dict['rights_statement'] = rights_statement_with_title(
+#                attr_dict['title'])
+#        if ('bibliographic_citation' not in attr_dict.keys()):
+#            attr_dict['bibliographic_citation'] = biblio_citation_with_title(
+#                attr_dict['title'])
+#        if ('rights_holder' not in attr_dict.keys()):
+#            attr_dict['rights_holder'] = rights_holder
     if item_type == 'Collection':
         attr_dict['collection_category'] = collection_category
         if 'visibility' not in attr_dict.keys():

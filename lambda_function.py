@@ -4,20 +4,16 @@ import urllib.request
 import requests
 import boto3
 import io
-import sys
+import re
 import pandas as pd
 from datetime import datetime, timezone
 from dateutil.parser import parse
 import uuid
 import os
 from boto3.dynamodb.conditions import Key, Attr
-from botocore.response import StreamingBody
 
 # Environment variables
 collection_category = os.getenv('Collection_Category')
-#rights_statement = os.getenv('Rights_Statement')
-#biblio_citation = os.getenv('Bibliographic_Citation')
-#rights_holder = os.getenv('Rights_Holder')
 region_name = os.getenv('REGION')
 collection_table_name = os.getenv('DYNO_Collection_TABLE')
 archive_table_name = os.getenv('DYNO_Archive_TABLE')
@@ -29,7 +25,6 @@ long_url_path = os.getenv('LONG_URL_PATH')
 short_url_path = os.getenv('SHORT_URL_PATH')
 api_key = os.getenv('API_KEY')
 api_endpoint = os.getenv('API_ENDPOINT')
-
 
 try:
     dyndb = boto3.resource('dynamodb', region_name=region_name)
@@ -55,15 +50,29 @@ single_value_headers = [
     'start_date',
     'title']
 multi_value_headers = [
+    'alternative',
+    'basis_of_record',
     'belongs_to',
     'contributor',
+    'conforms_to',
+    'coverage',
+    'created',
     'creator',
+    'date',
     'description',
     'format',
+    'has_format',
+    'has_part',
+    'has_version',
+    'is_format_of',
+    'is_version_of',
     'language',
+    'license',
     'location',
     'medium',
+    'other_identifier',
     'provenance',
+    'publisher',
     'reference',
     'related_url',
     'repository',
@@ -71,7 +80,8 @@ multi_value_headers = [
     'resource_type',
     'source',
     'subject',
-    'tags']
+    'tags',
+    'temporal']
 old_key_list = [
     'title',
     'description',
@@ -184,18 +194,6 @@ reversed_attribute_names = {
     'reference': '#rf'}
 
 DUPLICATED = "Duplicated"
-
-def local_handler(filename):
-    body_encoded = open(filename).read().encode()
-    stream = StreamingBody(io.BytesIO(body_encoded),len(body_encoded))
-    response = {"Body": stream}
-
-    if 'index.csv' in filename:
-        batch_import_archives_with_path(response)
-    elif 'collection_metadata.csv' in filename:
-        batch_import_collections(response)
-    elif 'archive_metadata.csv' in filename:
-        batch_import_archives(response)
 
 def lambda_handler(event, context):
 
@@ -336,26 +334,36 @@ def batch_import_archives_with_path(response):
 def header_update(records):
 
     df = records.rename(columns={
+        'dcterms.alternative': 'alternative',
         'dcterms.bibliographicCitation': 'bibliographic_citation',
+        'dcterms.conformsTo': 'conforms_to'
         'dcterms.contributor': 'contributor',
-        'dcterms.coverage': 'location',
-        'dcterms.created': 'start_date',
+        'dcterms.coverage': 'coverage,
+        'dcterms.created': 'created',
         'dcterms.creator': 'creator',
-        'dcterms.date': 'end_date',
+        'dcterms.date': 'date',
         'dcterms.description': 'description',
-        'dcterms.format': 'format',
         'dcterms.extent': 'extent',
+        'dcterms.format': 'format',
+        'dcterms.hasFormat': 'has_format',
+        'dcterms.hasPart': 'has_part',
+        'dcterms.hasVersion': 'has_version',
         'dcterms.identifier': 'identifier',
+        'dcterms.isFormatOf': 'is_format_of',
         'dcterms.isPartOf': 'belongs_to',
+        'dcterms.isVersionOf': 'is_version_of',
         'dcterms.language': 'language',
+        'dcterms.license': 'license',
         'dcterms.medium': 'medium',
         'dcterms.provenance': 'provenance',
+        'dcterms.publisher': 'publisher',
         'dcterms.references': 'reference',
         'dcterms.relation': 'related_url',
         'dcterms.rights': 'rights_statement',
         'dcterms.source': 'source',
         'dcterms.subject': 'subject',
         'dcterms.rightsHolder': 'rights_holder',
+        'dcterms.temporal': 'temporal',
         'dcterms.title': 'title',
         'dcterms.type': 'resource_type'})
 
@@ -491,15 +499,6 @@ def process_csv_metadata(data_row, item_type):
 
 
 def set_attributes_from_env(attr_dict, item_type):
-#    if collection_category == 'IAWA':
-#        if ('rights_statement' not in attr_dict.keys()):
-#            attr_dict['rights_statement'] = rights_statement_with_title(
-#                attr_dict['title'])
-#        if ('bibliographic_citation' not in attr_dict.keys()):
-#            attr_dict['bibliographic_citation'] = biblio_citation_with_title(
-#                attr_dict['title'])
-#        if ('rights_holder' not in attr_dict.keys()):
-#            attr_dict['rights_holder'] = rights_holder
     if item_type == 'Collection':
         attr_dict['collection_category'] = collection_category
         if 'visibility' not in attr_dict.keys():
@@ -787,14 +786,3 @@ def update_NOID(long_url, short_url, noid, create_date):
     url = api_endpoint + 'update'
     response = requests.post(url, data=body, headers=headers)
     print(f"update_NOID: {response.text}")
-
-
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 lambda_function.py <filename>")
-        sys.exit(1)
-    else:
-        filename = "".join(sys.argv[1])
-        local_handler(filename)
-        
